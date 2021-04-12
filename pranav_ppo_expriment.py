@@ -290,10 +290,10 @@ class Environment():
         #DISTANCE
         
         if distance_goal < 6 and lidar_distance < 8 :
-            reward_d = (math.exp(-0.166*(distance_goal**2)))*0.001
+            reward_d = (math.exp(-0.166*(distance_goal**2)))*0.0001
     
         else:
-            reward_d = -(distance_goal * 0.00005)
+            reward_d = -(distance_goal * 0.000005)
         total_reward_d  += reward_d
         '''
         #extra adjustment
