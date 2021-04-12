@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
+
 import math
 import random
 from sensor_msgs.msg import LaserScan
@@ -21,22 +22,10 @@ from gazebo_msgs.msg import ModelStates
 import thread
 import time
 from scipy.spatial import distance
-
 from geometry_msgs.msg import Pose
 from gazebo_msgs.srv import SetModelState
 from gazebo_msgs.msg import ModelState
 from datetime import datetime
-from std_srvs.srv import Empty
-
-pause = rospy.ServiceProxy('/gazebo/pause_physics', Empty)
-unpause = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
-
-
-rospy.wait_for_service("/gazebo/set_model_state")
-m = rospy.ServiceProxy("/gazebo/set_model_state",SetModelState)
-
-command = ModelState()
-command.model_name = "Kwad"
 
 from std_srvs.srv import Empty
 import os
@@ -145,9 +134,6 @@ class agent(object):
                     a_t += discount*(rewards_arr[k] + self.gamma*vals[k+1] - vals[k])
                     discount *= self.gamma*self.gae_lambda
                 adv[j] = a_t
-            
-            #print(rewards_arr , "reward array")
-            #print(adv , "advantage")
             adv = T.tensor(adv).to(self.actor.device)
             vals = T.tensor(vals).to(self.actor.device)
 
@@ -176,7 +162,6 @@ class agent(object):
                 critic_loss = (returns-cr_val)**2
                 critic_loss = critic_loss.mean()
                 total_loss = actor_loss + 0.5*critic_loss
-                #print(actor_loss , critic_loss , total_loss , "actor_loss , critic_loss , total_loss ")
                 self.actor.optimizer.zero_grad()
                 self.critic.optimizer.zero_grad()
                 total_loss.backward()
@@ -255,16 +240,46 @@ class Environment():
         
        
         elif action == 1: #pitch+
+            m1 = 45
+            m2 = 55
+            m3 = 55
+            m4 = 45
+        elif action == 2: #pitch-
+            m1 = 55
+            m2 = 45
+            m3 = 45
+            m4 = 55
+        elif action == 3: #roll+
+            m1 = 45
+            m2 = 45
+            m3 = 55
+            m4 = 55
+        elif action == 4: #roll+-
+            m1 = 55
+            m2 = 55
+            m3 = 45
+            m4 = 45
+        elif action == 5: #yaw+
+            m1 = 55
+            m2 = 45
+            m3 = 55
+            m4 = 45
+        elif action == 6: #yaw-
+            m1 = 45
+            m2 = 55
+            m3 = 45
+            m4 = 55
+        elif action == 7: #mantain
             m1 = 50
             m2 = 50
             m3 = 50
             m4 = 50
-        else : #pitch-
+        
+        elif action == 8: #down
             m1 = 0
             m2 = 0
             m3 = 0
             m4 = 0
-
     
         #CONVERT TO REWARD
         velocity.data = [abs(m1) ,-abs(m2) , abs(m3), -abs(m4)]
@@ -283,7 +298,7 @@ class Environment():
     def get_reward(self , state , action):        
         global m1 , m2 , m3 , m4 ,lidar_distance ,global_y , global_x , episode , total_reward_m, total_reward_d ,total_reward_y , total_reward_rp , closest_dist , distance_goal , name_data
         
-        #print(m1,m2,m3,m4)
+        print(m1,m2,m3,m4)
 
         drone_position = [global_x , global_y , lidar_distance]
         goal_position = [0 , 0 , 7]
@@ -321,7 +336,7 @@ class Environment():
         reward_y = 0
         reward_rp = 0
         
-        #print(reward_d)
+        print(reward_d)
         reward = reward_d
 
         with open(name_data + '.csv','a') as csv_file:
@@ -334,11 +349,57 @@ class Environment():
     
     def get_state(self,state):
         global global_x, global_y, lidar_distance, yaw, pitch, roll, m1, m2, m3 ,m4 , distance_goal
-        state[0] = state[1]
-        state[1] = state[2]
-        state[2] = state[3]
-        state[3] = state[4]
-        state[4] = lidar_distance
+        
+        state[0] = state[11]
+        state[1] = state[12]
+        state[2] = state[13]
+        state[3] = state[14]
+        state[4] = state[15]
+        state[5] = state[16]
+        state[6] = state[17]
+        state[7] = state[18]
+        state[8] = state[19]
+        state[9] = state[20]
+        state[10] = state[21]
+
+        state[11] = state[22]
+        state[12] = state[23]
+        state[13] = state[24]
+        state[14] = state[25]
+        state[15] = state[26]
+        state[16] = state[27]
+        state[17] = state[28]
+        state[18] = state[29]
+        state[19] = state[30]
+        state[20] = state[31]
+        state[21] = state[32]
+
+        state[22] = state[33]
+        state[23] = state[34]
+        state[24] = state[35]
+        state[25] = state[36]
+        state[26] = state[37]
+        state[27] = state[38]
+        state[28] = state[39]
+        state[29] = state[40]
+        state[30] = state[41]
+        state[31] = state[42]
+        state[32] = state[43]
+
+
+        state[33] = yaw
+        state[34] = pitch
+        state[35] = roll
+        state[36] = m1
+        state[37] = m2
+        state[38] = m3
+        state[39] = m4
+        state[40] = global_x
+        state[41] = global_y
+        state[42] = lidar_distance
+        state[43] = distance_goal
+
+
         return state
 
 
@@ -378,12 +439,12 @@ def service():
     global roll, pitch, yaw , lidar_distance , m1 , m2 , m3 , m4 ,episode , total_reward_m, total_reward_d ,total_reward_y , total_reward_rp , closest_dist , distance_goal , name_data
     env = Environment()
     N = 2048
-    batch_size = 128
+    batch_size = 512
     n_epochs = 4
     
-    drone = agent(n_actions = 3 ,batch_size = batch_size , n_epochs = n_epochs ,input_dims = 5)
+    drone = agent(n_actions = 9 ,batch_size = batch_size , n_epochs = n_epochs ,input_dims = 44)
     reward_history = []
-    Number_of_episodes = 200
+    Number_of_episodes = 500
     #print(lidar_distance,"lidar_distance")
     name =  'EP_data/data.csv'+ str(datetime.now())
     with open(name,'w') as csv_file_2:
@@ -406,7 +467,7 @@ def service():
         goal_position = [0 , 0 , 7]
         distance_goal = distance.euclidean(goal_position , drone_position)
         
-        state = [0]*5
+        state = [0]*44 
         j = 0
         
         ep_reward = 0
@@ -450,15 +511,15 @@ def service():
             state = next_state
             ep_reward = ep_reward+reward
             k = k+1
-            if k % 512 == 0:
-                pause()
-                drone.learn(states , actions , values , rewards , probs)
-                unpause()
-                states=[]
-                values = []
-                actions = []
-                rewards = []
-                probs = []
+            
+        m1 = 0
+        m2 = 0
+        m3 = 0
+        m4 = 0
+        velocity.data = [0 , 0 , 0 , 0]
+        velPub.publish(velocity)
+        reset_world()
+        drone.learn(states , actions , values , rewards , probs)
         reward_history.append(ep_reward)
         #print(ep_reward)
 
@@ -508,7 +569,6 @@ def main():
     rospy.Subscriber("/Kwad/scan" , LaserScan , lasercall_back)
     rospy.Subscriber("/gazebo/model_states" , ModelStates , location_callback)
     rospy.wait_for_service('/gazebo/reset_world')
-    
     velocity.data = [0 , 0 , 0 , 0]
     velPub.publish(velocity)
     
