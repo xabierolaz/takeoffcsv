@@ -54,9 +54,11 @@ m2 = 0
 m3 = 0
 m4 = 0
 
-print("step define global")
-global roll, pitch, yaw , lidar_distance ,velocity , global_x , global_y  , episode , total_reward_m, total_reward_d ,total_reward_y , total_reward_rp , closest_dist , distance_goal , name_data , total_positive_reward , total_negative_reward  , end_distance , max_distance
 
+#print("step define global")
+global roll, pitch, yaw , lidar_distance ,velocity , global_x , global_y  , episode , total_reward_m, total_reward_d ,total_reward_y , total_reward_rp , closest_dist , distance_goal , name_data , total_positive_reward , total_negative_reward  , end_distance , max_distance , episode_count 
+
+episode_count = 0
 
 
 name =  'TRAININGS/'+ str(datetime.now())
@@ -193,12 +195,14 @@ class Environment():
         #print(m1,m2,m3,m4)
         #print(global_x)
         drone_position = [global_x , global_y , lidar_distance]
-        goal_position = [0 , 0 , 7]
+        goal_position = [0 , 0 , 5]
         distance_goal = distance.euclidean(goal_position , drone_position)  
         #print(distance_goal , drone_position ) 
         if closest_dist > distance_goal :
             closest_dist = distance_goal
-           
+
+        reward = 0
+        reward_d = 0              
        
         end_distance =  distance_goal
         
@@ -207,20 +211,21 @@ class Environment():
 
         
         
-        '''
-        if (lidar_distance < 7) and (action == 0):
-             reward = 1
-        if (lidar_distance > 7) and (action == 8):
-            reward = 1
-        '''
-        reward = 0
-        reward_d = 0   
-
-        if distance_goal < 6 and lidar_distance < 8 :
-            reward_d = 7-distance_goal
-       
+        if (global_x <2 and global_y < 2 and lidar_distance < 6):
+            if ((lidar_distance > 0) and (lidar_distance < 4)) and action == 0 :
+                reward_d = 0.1
+            elif ((lidar_distance > 4) and (lidar_distance < 5)) and action == 7 :
+                reward_d = 0.1
+            elif (lidar_distance > 5) and (action == 8):
+                reward_d = 0.1
+            if distance_goal < 1 and roll < 0.1 and pitch < 0.1 and lidar_distance < 5:
+                reward_d = 1
+        
         else:
             reward_d = 0
+        
+
+
 
         total_reward_d  += reward_d
         reward_y = 0
@@ -311,7 +316,7 @@ class PPO():
 
 
     def rollout(self):
-        global m1 , m2 , m3 , m4 ,lidar_distance ,global_y , global_x ,roll, pitch, episode , total_reward_m, total_reward_d ,total_reward_y , total_reward_rp , closest_dist , distance_goal , name_data , total_positive_reward , total_negative_reward , end_distance , max_distance  ,highest_point ,highest_x , highest_y , highest_pitch , highest_roll , up_actions , down_actions
+        global m1 , m2 , m3 , m4 ,lidar_distance ,global_y , global_x ,roll, pitch, episode , total_reward_m, total_reward_d ,total_reward_y , total_reward_rp , closest_dist , distance_goal , name_data , total_positive_reward , total_negative_reward , end_distance , max_distance  ,highest_point ,highest_x , highest_y , highest_pitch , highest_roll , up_actions , down_actions ,episode_count 
         batch_obs = []
         batch_acts = []
         batch_log_probs = []
@@ -328,13 +333,15 @@ class PPO():
             # Reset the environment. sNote that obs is short for observation. 
             obs = self.env.reset()
             done = False
-            name_data = my_folder + str(t/self.max_timesteps_per_episode)
+            episode_number = episode_count/self.max_timesteps_per_episode
+            name_data = my_folder + str(episode_number)
             # Run an episode for a maximum of max_timesteps_per_episode timesteps
             for ep_t in range(self.max_timesteps_per_episode):
 
                 t += 1 # Increment timesteps ran this batch so far
                 # print(t)
                 # Track observations in this batch
+                episode_count += 1
                 batch_obs.append(obs)
 
                 # Calculate action and make a step in the env. 
@@ -364,7 +371,7 @@ class PPO():
                     down_actions += 1
 
                 # Track recent reward, action, and action log probability
-                ep_rews.append(rew)
+                ep_rews.append(rew)  # we are collecting all the rewards in ep_rews
                 batch_acts.append(action)
                 batch_log_probs.append(log_prob)
                 with open(name,'a') as csv_file_2:
@@ -373,6 +380,7 @@ class PPO():
                     #'epsodic reward' , 'total_positive_reward' , 'total_negative_reward' ,'closest_dist' ,'max_height' ,'end_distance' ,'max_distance' , 'up_actions(100)' , 'down_actions(0)', 'highest_x' , 'highest_y' , 'highest_pitch' , 'highest_roll' , 'epsodic reward_m' , 'episodic reward_d','episodic reward_y' ,'episodic reward_rp'
                     csv_writer_2.writerow(information2)
 
+            print(sum(ep_rews) , "in episode" ,episode_number ) # sum will add all the rewards
             
             batch_lens.append(ep_t + 1)
             batch_rews.append(ep_rews)
@@ -382,7 +390,7 @@ class PPO():
         batch_acts = torch.tensor(batch_acts, dtype=torch.float)
         batch_log_probs = torch.tensor(batch_log_probs, dtype=torch.float)
         batch_rtgs = self.compute_rtgs(batch_rews)  
-        print(sum(batch_acts == 0),"len(batch_acts == 0)")
+        #print(sum(batch_acts == 0),"len(batch_acts == 0)")
         
         return batch_obs, batch_acts, batch_log_probs, batch_rtgs, batch_lens
 
@@ -504,6 +512,7 @@ def lasercall_back(msg):
     #print("step 2") 
     distance = msg.ranges
     lidar_distance = min(distance)
+    #print(lidar_distance)
     if (lidar_distance == inf or lidar_distance == -inf) :
         lidar_distance = 0
         
