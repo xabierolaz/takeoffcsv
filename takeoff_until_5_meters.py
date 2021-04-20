@@ -212,14 +212,14 @@ class Environment():
         
         
         if (global_x <2 and global_y < 2 and lidar_distance < 6):
-            if ((lidar_distance > 0) and (lidar_distance < 4)) and action == 0 :
+            if ((lidar_distance > 0) and (lidar_distance < 3)) and action == 0 :
                 reward_d = 0.1
-            elif ((lidar_distance > 4) and (lidar_distance < 5)) and action == 7 :
+            elif ((lidar_distance > 3) and (lidar_distance < 5)) and action == 7 :
                 reward_d = 0.1
             elif (lidar_distance > 5) and (action == 8):
                 reward_d = 0.1
             if distance_goal < 1 and roll < 0.1 and pitch < 0.1 and lidar_distance < 5:
-                reward_d = 1
+                reward_d = 0.1
         
         else:
             reward_d = 0
