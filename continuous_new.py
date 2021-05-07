@@ -7,7 +7,7 @@ os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 import numpy as np
 import csv
 from gym import spaces
-
+from torch.distributions import Normal
 # 3D point & Stamped Pose msgs
 # it is a Laserscan not a point cloude so we may not need the point msg here
 
@@ -16,6 +16,7 @@ from collections import namedtuple
 import torch 
 import torch.nn as nn
 from torch.optim import Adam
+from torchsummary import summary
 import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
 from torch.distributions import MultivariateNormal
@@ -59,7 +60,7 @@ m4 = 0
 #print("step define global")
 global roll, pitch, yaw , lidar_distance ,velocity , global_x , global_y  , episode , total_reward_m, total_reward_d ,total_reward_xy , total_reward_pr , closest_dist , distance_goal , name_data , total_positive_reward , total_negative_reward  , end_distance , max_distance , episode_count , change 
 
-change = int(1)
+change = int(10)
 episode_count = 0
 
 
@@ -86,25 +87,28 @@ if not os.path.exists(cr_weights_folder):
 class Network(nn.Module):
     def __init__(self , in_dim , out_dim):
         super(Network,self).__init__()
-
-        self.layer_1 = nn.Linear(in_dim, 256)
-        self.layer_2 = nn.Linear(256,256)
-        self.layer_3 = nn.Linear(256,out_dim)
-
-        self.active_1 = nn.Tanh()
-        self.active_2 = nn.Tanh()
-        self.active_3 = nn.Tanh()
-
+        self.model = nn.Sequential(
+            nn.Linear(in_dim , 32),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(32,32),
+            nn.Dropout(0.5),
+            nn.Linear(32,32),
+            nn.Dropout(0.5),
+            nn.Linear(32,out_dim),
+            nn.Tanh()
+        )
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.to(self.device)
+        self.log_std = nn.Parameter(torch.ones(out_dim)*-4)
+    
     def forward(self,obs):
-
-        if isinstance(obs, np.ndarray):
-            obs = torch.tensor(obs, dtype=torch.float)
-        ac1 = self.active_1(self.layer_1(obs))
-        ac2 = self.active_2(self.layer_2(ac1))
+        if isinstance(obs ,np.ndarray):
+            obs = torch.tensor(obs ,dtype= torch.float).to(self.device)
         
-        ac3 = self.active_3(self.layer_3(ac2))
+        out = self.model(obs)
 
-        return ac3
+        return out
 
 
 
@@ -119,24 +123,36 @@ class Environment():
 
 
     def reset(self):
+        global m1,m2,m3,m4
         obs = np.array([0.0 , 0.0 , 0.0 , 0.0 , 0.0 , 0.0 , 0.0 , 0.0 , 0.0 , 0.0 , 0.0 , 0.0 , 0.0 , 0.0])
         #print(obs.shape ,"obs.shape()")
         reset_world()
+        velocity.data = [0 , 0 , 0 , 0]
+        velPub.publish(velocity)
+        rospy.sleep(1)
+        m1 = 0
+        m2 = 0
+        m3 = 0
+        m4 = 0
+
         return obs 
 
 
     def step(self,action,state):
-        global m1 , m2 , m3 , m4 , global_y , global_x , lidar_distance , yaw , roll , pitch, manual_mode 
+        global m1 , m2 , m3 , m4 , global_y , global_x , lidar_distance , yaw , roll , pitch
         
         
     
         #CONVERT TO REWARD
         #print(abs(action[0]) ,-abs(action[1]) , abs(action[2]), -abs(action[3]))
         #print(action)
-        m1 = m1 + action[0]
-        m2 = m2 + action[1]
-        m3 = m3 + action[2]
-        m4 = m4 + action[3]
+
+        #print(action[0]*change,action[1]*change,action[2]*change,action[3]*change)
+        #action = action*change
+        m1 = m1 + action[0]*change
+        m2 = m2 + action[1]*change
+        m3 = m3 + action[2]*change
+        m4 = m4 + action[3]*change
 
         if m1 > 100:
             m1 = 100
@@ -154,18 +170,16 @@ class Environment():
             m4 = 100
         if m4 < 0:
             m4 = 0
-
         #print(m1,m2,m3,m4)
+        #print(action)
         velocity.data = [abs(m1) ,-abs(m2) , abs(m3), -abs(m4)]
+        #velocity.data = [0,0 , 0, 0]
         velPub.publish(velocity)
 
 
         reward = self.get_reward(state,action)
         next_state = self.get_state(state)
-       
-        #FIX GROUND DISTANCE DIFFERENCE OF 0.10000000149 BECAUSE OF SDF MODEL
-        '''if lidar_distance <= 0.11 :
-            lidar_distance = 0'''
+    
         return next_state , reward 
     
     #REWARDS
@@ -195,35 +209,23 @@ class Environment():
         if max_distance < distance_goal:
             max_distance = distance_goal
 
+        #print(state[13] - distance_goal > 0.0001 )
         
-        if (global_x <1 and global_y < 1 and lidar_distance < 4) and abs(pitch) < 0.05 and abs(roll) < 0.05 and ((abs(yaw)-abs(state[10]))< 0.0001):
-            reward_d = (5-distance_goal)/40
-            if distance_goal < 0.2:
+        
+       
+        if (global_x <1 and global_y < 1) and ((lidar_distance > 0.1) and (lidar_distance < 4)) and (abs(pitch) < 0.05) and (abs(roll) < 0.05) and  (abs((abs(yaw)-abs(state[10]))) < 0.0001):
+
+            reward_d = 0.01
+
+            if lidar_distance > 3.8 and lidar_distance < 4.0:
+
                 reward_d = 1
-        
         else:
             reward_d = 0
-        '''
-        if (global_x <1 and global_y < 1 and lidar_distance < 6):
-            if ((lidar_distance > 0) and (lidar_distance < 3)):
-                reward_d = 0.1
-            elif ((lidar_distance > 3) and (lidar_distance < 5)):
-                reward_d = 0.1
-            elif (lidar_distance > 5):
-                reward_d = 0.1
-          
-        if distance_goal < 1 and lidar_distance < 5:
-                reward_d = (1-distance_goal)*0.1
-        
-        else:
-            reward_d = 0
+
         
         
         
-        if (global_x > 1 or global_y > 1):
-            if (action == 8 or action == 2 or action == 6 or action == 4):
-                reward_d = 1
-        '''
         total_reward_d  += reward_d
         total_reward_pr  += reward_pr
 
@@ -277,12 +279,14 @@ class PPO():
         
         self.actor = Network(self.obs_dim , self.act_dim)
         self.critic = Network(self.obs_dim , 1)
-
-        self.actor_optim = Adam(self.actor.parameters(), lr=self.lr)
-        self.critic_optim = Adam(self.critic.parameters(), lr=self.lr)
+        model_parameters = filter(lambda p: p.requires_grad, self.actor.parameters())
+        params = sum([np.prod(p.size()) for p in model_parameters])
+        #print(params)
+        self.actor_optim = Adam(self.actor.parameters(), lr= 3e-4 ,weight_decay=0.2)
+        self.critic_optim = Adam(self.critic.parameters(), lr= 1e-3 ,weight_decay=0.2)
 
         self.cov_var = torch.full(size=(self.act_dim,), fill_value=0.002)
-        self.cov_mat = torch.diag(self.cov_var)
+        self.cov_mat = torch.diag(self.cov_var).to(self.actor.device)
 
     def learn(self,total_timesteps):
         global m1 , m2 , m3 , m4 ,lidar_distance ,global_y , global_x ,roll, pitch, episode , total_reward_m, total_reward_d ,total_reward_xy , total_reward_pr , closest_dist , distance_goal , name_data , total_positive_reward , total_negative_reward , end_distance , max_distance
@@ -304,17 +308,19 @@ class PPO():
             A_k = batch_rtgs - V.detach()                                                                       
             A_k = (A_k - A_k.mean()) / (A_k.std() + 1e-10)
 
+            A_k = A_k.to(self.actor.device)
+            A_k = torch.reshape(A_k ,(len(A_k),1))
             # This is the loop where we update our network for some n epochs
             for _ in range(self.n_updates_per_iteration):                                                       
                 # Calculate V_phi and pi_theta(a_t | s_t)
                 V, curr_log_probs = self.evaluate(batch_obs, batch_acts)
+                #print(batch_log_probs,"batch_log_probs")
+                #print(curr_log_probs,"curr_log_probs")
                 ratios = torch.exp(curr_log_probs - batch_log_probs)
-                #print("learning")
-                #print(len(batch_obs))
-                # Calculate surrogate losses.
+                
                 surr1 = ratios * A_k
                 surr2 = torch.clamp(ratios, 1 - self.clip, 1 + self.clip) * A_k
-
+                
                 actor_loss = (-torch.min(surr1, surr2)).mean()
                 critic_loss = nn.MSELoss()(V, batch_rtgs)
 
@@ -326,6 +332,9 @@ class PPO():
                 self.critic_optim.zero_grad()
                 critic_loss.backward()
                 self.critic_optim.step()
+                
+                #print(actor_loss , "actor loss" , critic_loss , "critic loss")
+
             unpause()
 
             
@@ -368,6 +377,10 @@ class PPO():
             total_positive_reward = 0
             total_negative_reward = 0
             
+
+            with open(name_data + '.csv','w') as csv_file:
+                csv_writer = csv.DictWriter(csv_file , fieldnames = fieldnames)
+                csv_writer.writeheader()
             # Run an episode for a maximum of max_timesteps_per_episode timesteps
             for ep_t in range(self.max_timesteps_per_episode):
 
@@ -375,7 +388,7 @@ class PPO():
                 # print(t)
                 # Track observations in this batch
                 episode_count += 1
-                batch_obs.append(obs)
+                batch_obs.append(obs.copy())
 
                 # Calculate action and make a step in the env. 
                 # Note that rew is short for reward.
@@ -415,19 +428,18 @@ class PPO():
             batch_lens.append(ep_t + 1)
             batch_rews.append(ep_rews)
 
-        batch_obs = torch.tensor(batch_obs, dtype=torch.float)
+        batch_obs = torch.tensor(batch_obs, dtype=torch.float).to(self.actor.device)
         batch_acts = np.array(batch_acts)
-        batch_acts = torch.tensor(batch_acts, dtype=torch.float)
-        batch_log_probs = torch.tensor(batch_log_probs, dtype=torch.float)
+        
+        batch_acts = torch.tensor(batch_acts, dtype=torch.float).to(self.actor.device)
+        batch_log_probs = np.array(batch_log_probs)
+        batch_log_probs = torch.tensor(batch_log_probs, dtype=torch.float).to(self.actor.device)
         batch_rtgs = self.compute_rtgs(batch_rews)  
         #print(sum(batch_acts == 0),"len(batch_acts == 0)")
 
         if (episode_number%100 == 0):
             torch.save(self.actor.state_dict(), ac_weights_folder + 'ppo_actor'+ str(episode_number)+ '.pth')
-            torch.save(self.critic.state_dict(), cr_weights_folder + 'ppo_critic' +str(episode_number)+ '.pth')
-
-
-        
+            torch.save(self.critic.state_dict(), cr_weights_folder + 'ppo_critic' +str(episode_number)+ '.pth')        
         return batch_obs, batch_acts, batch_log_probs, batch_rtgs, batch_lens
 
     def compute_rtgs(self, batch_rews):
@@ -443,37 +455,42 @@ class PPO():
                 batch_rtgs.insert(0, discounted_reward)
 
         # Convert the rewards-to-go into a tensor
-        batch_rtgs = torch.tensor(batch_rtgs, dtype=torch.float)
+        batch_rtgs = torch.tensor(batch_rtgs, dtype=torch.float).to(self.actor.device)
 
         return batch_rtgs
 
     def get_action(self, obs):
         global change
         # Query the actor network for a mean action
-        out = self.actor(obs)
-        #print(out)
-        dist = MultivariateNormal(out, self.cov_mat)
+        out = self.actor(obs).to(self.actor.device)
+        std = self.actor.log_std.exp().expand_as(out).to(self.actor.device)
+        #print(std)
+        dist = Normal(out, std)
+        #dist = dist.to(self.actor.device)
         # Sample an action from the distribution
         action = dist.sample()
-        #print(action)
         #print(change)
-        action = action*change
         #print(action)
         # Calculate the log probability for that action
         log_prob = dist.log_prob(action)
-        
+        log_prob = log_prob.cpu().detach().numpy()
+        #print(obs)
+        #print(log_prob)
         # Return the sampled action and the log probability of that action in our distribution
-        return action.detach().numpy(), log_prob.detach()
+        return action.cpu().detach().numpy(), log_prob
 
     def evaluate(self, batch_obs, batch_acts):
         V = self.critic(batch_obs).squeeze()
 
         # Calculate the log probabilities of batch actions using most recent actor network.
         # This segment of code is similar to that in get_action()
-        out = self.actor(batch_obs)
-        dist = MultivariateNormal(out, self.cov_mat)
-        log_probs = dist.log_prob(batch_acts)
+        out = self.actor(batch_obs).to(self.actor.device)
 
+        std = self.actor.log_std.exp().expand_as(out).to(self.actor.device)
+        dist = Normal(out, std)
+        log_probs = dist.log_prob(batch_acts)
+        #print(batch_obs)
+        #print(log_probs ,"evaluate")
 		# Return the value vector V of each observation in the batch
 		# and log probabilities log_probs of each action in the batch
         return V, log_probs
@@ -482,9 +499,9 @@ class PPO():
         # Initialize default values for hyperparameters
         # Algorithm hyperparameters
         
-        self.max_timesteps_per_episode = 4096   # Max number of timesteps per episode
+        self.max_timesteps_per_episode = 2048   # Max number of timesteps per episode
         self.timesteps_per_batch = 3*self.max_timesteps_per_episode          # Number of timesteps to run per batch
-        self.n_updates_per_iteration = 5                # Number of times to update actor/critic per iteration
+        self.n_updates_per_iteration = 4             # Number of times to update actor/critic per iteration
         self.lr = 2.5e-4                               # Learning rate of actor optimizer
         self.gamma = 0.99                               # Discount factor to be applied when calculating Rewards-To-Go
         self.clip = 0.2                                 # Recommended 0.2, helps define the threshold to clip the ratio during SGA
@@ -546,7 +563,7 @@ def service():
     time.sleep(1)
     
     model = PPO()
-    model.learn(20000000)
+    model.learn(100000000)
 
     
 
