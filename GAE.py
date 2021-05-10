@@ -93,8 +93,6 @@ class Network(nn.Module):
             nn.Dropout(0.5),
             nn.Linear(64,64),
             nn.Dropout(0.5),
-            nn.Linear(64,64),
-            nn.Dropout(0.5),
             nn.Linear(64,out_dim),
             nn.Tanh()
         )
@@ -143,8 +141,8 @@ class Network(nn.Module):
         out = self.model(obs)
 
         return out
-'''
 
+'''
 
 
 class Environment():
@@ -242,26 +240,65 @@ class Environment():
         #CHECK YAW IS NOT ACCELERATING
         
         #DIFFERENCE IN YAW IN LAST 2 TIMESTEPS IS SMALLER THAN IN PREVIOUS 2 TIMESTEPS
-        '''
-        if abs(pitch) and abs(roll) < 10:
-            reward_pr = 1
-        else:
-            reward_pr = 0
+        ''' 
+        
         
         
         
              #YAW OPTION B
         if abs(abs(yaw)-abs(state[25]))< 1 and abs(abs(state[14])-abs(state[3])) < 1:
             
-            reward_yaw = 1
+            reward_yaw = 0
 
         else:
-            reward_yaw = 0
+            reward_yaw = -1
             #print("yaw error")
             
+          
+        si distance_goal < anterior
+            si lidar_distance (actual) < 5  
+                +lidar
+            si lidar_distance (actual) > 5  (lidar_distance(atual) > lidar_distance (actual-1)) && (lidar
+                -lidar
+           
+           
+           && _distance(atual-1) > lidar_distance (actual-2)))
+            recompensa + 1
+        ''' 
+
+           
+        #DISTANCE_GOAL
+        if abs(pitch) and abs(roll) < 10:
+            reward_pr = 0#MAX IS 0 SO
+        
+            if lidar_distance <= 5:
+                
+                if (lidar_distance - state[24]) > 0.001:
+                    reward_d = 0.1
+                    print("UP ")
+                else:
+                    reward_d = -0.1
+                    print("NO UP")
+
+
+
+            elif lidar_distance > 5:
+                if abs(lidar_distance - state[24]) < abs((state[24] - state[13])) or lidar_distance < state[24]:    
+                    print("DECREASE")
+                    reward_d = 0.2
+                else:
+                    reward_d = -0.2
+                    print("NO DECREASE")
+
+            
+            
+            else:
+                reward_d = 0
+                #("away")
+        else:
+            reward_pr = -0.1
+            print("PITCHROLL OUT")
         '''    
-            
-            
         #YAW OPTION A
         #if the yaw has been increasing over abs 1 in two consecutive steps
         if abs(abs(yaw)-abs(state[25])) > 1 and abs(abs(state[25])-abs(state[14])) > 1:
@@ -273,8 +310,9 @@ class Environment():
                 #print("yaw error")
             
        
+       
 
-        '''
+        
             reward_d = math.exp(-0.33723073*(distance_goal**2))
 
         else:
@@ -287,7 +325,7 @@ class Environment():
         
         
         reward = reward_d + reward_pr + reward_yaw
-        
+        #print (reward)
         with open(name_data + '.csv','a') as csv_file:
             csv_writer = csv.DictWriter(csv_file , fieldnames = fieldnames)
             information = { "reward" : reward , "reward_d" : reward_d , "distance" : distance_goal, "lidar_value" : lidar_distance, "motor values" : [m1,m2,m3,m4], "global_x" : global_x , "global_y": global_y , "pitch" : pitch ,"roll" : roll, "yaw" : yaw }
@@ -326,14 +364,14 @@ class Environment():
         state[22] = global_x
         state[23] = global_y
         state[24] = lidar_distance
-        state[25] = yaw
-        state[26] = pitch
-        state[27] = roll
+        state[25] = yaw/18
+        state[26] = pitch/18
+        state[27] = roll/18
         state[28] = distance_goal
-        state[29] = m1
-        state[30] = m2
-        state[31] = m3
-        state[32] = m4
+        state[29] = m1/10
+        state[30] = m2/10
+        state[31] = m3/10
+        state[32] = m4/10
         
         #print(global_x, global_y, distance_goal, lidar_distance, yaw, pitch, roll)
         #print(state)
@@ -353,8 +391,8 @@ class PPO():
         model_parameters = filter(lambda p: p.requires_grad, self.actor.parameters())
         params = sum([np.prod(p.size()) for p in model_parameters])
         #print(params)
-        self.actor_optim = Adam(self.actor.parameters(), lr= 1e-4 ,weight_decay=0.2)
-        self.critic_optim = Adam(self.critic.parameters(), lr= 1e-4 ,weight_decay=0.2)
+        self.actor_optim = Adam(self.actor.parameters(), lr= 3e-4 ,weight_decay=0.2)
+        self.critic_optim = Adam(self.critic.parameters(), lr= 3e-4 ,weight_decay=0.2)
 
         self.cov_var = torch.full(size=(self.act_dim,), fill_value=0.002)
         self.cov_mat = torch.diag(self.cov_var).to(self.actor.device)
