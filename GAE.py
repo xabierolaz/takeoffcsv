@@ -43,26 +43,27 @@ unpause = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
 rospy.wait_for_service("/gazebo/set_model_state")
 m = rospy.ServiceProxy("/gazebo/set_model_state",SetModelState)
 
+
+
 command = ModelState()
 command.model_name = "Kwad"
-print("step 1")
 
 velPub = rospy.Publisher('/Kwad/joint_motor_controller/command', Float64MultiArray, queue_size=4)
 reset_world = rospy.ServiceProxy('/gazebo/reset_world', Empty)
-fieldnames = ['reward','reward_m','reward_d','reward_xy','reward_yaw','reward_pr' , 'motor values','distance' , 'lidar_value' , 'global_x' , 'global_y' , 'pitch' ,'roll', 'yaw']
-fieldnames2 = ['epsodic reward' , 'total_positive_reward' , 'total_negative_reward' ,'closest_dist' ,'max_height' ,'end_distance' ,'max_distance' , 'up_actions(100)' , 'down_actions(0)', 'highest_x' , 'highest_y' , 'highest_pitch' , 'highest_roll' , 'epsodic reward_m' , 'episodic reward_d','episodic reward_yaw' ,'episodic reward_pr' ]
-m1 = 0
-m2 = 0
-m3 = 0
-m4 = 0
+fieldnames = ['reward','motor_er','distance_er','pitch_er','roll_er', 'yaw_er', 'motor values','distance' , 'lidar_value' , 'global_x' , 'global_y' , 'pitch' ,'roll', 'yaw']
+fieldnames2 = ['epsodic reward'  ,'closest_dist' ,'max_height' ,'end_distance' ,'max_distance' , 'highest_x' , 'highest_y' , 'highest_pitch' , 'highest_roll' , 'epsodic motor_er' , 'episodic distance_er','episodic pitch_er','episodic roll_er','episodic yaw_er' ]
+m1 = 50
+m2 = 50
+m3 = 50
+m4 = 50
 
 
 
-global roll, pitch, yaw , lidar_distance ,velocity , global_x , global_y  , episode , total_reward_m, total_reward_d ,total_reward_yaw , total_reward_pr , closest_dist , distance_goal , name_data , total_positive_reward , total_negative_reward  , end_distance , max_distance , episode_number , change 
+global roll, pitch, yaw , lidar_distance ,velocity , global_x , global_y  , episode , total_motor_er, total_distance_er ,total_pitch_er ,total_roll_er , total_yaw_er ,  closest_dist , distance_goal , name_data , end_distance , max_distance , episode_number , change 
 
 change = int(10)
 episode_number = 0
-
+velocity = Float64MultiArray()
 
 name =  'TRAININGS/'+ str(datetime.now())
 with open(name,'w') as csv_file_2:
@@ -146,7 +147,7 @@ class Network(nn.Module):
 
 
 class Environment():
-    global m1 , m2 , m3 , m4 ,lidar_distance ,global_y , global_x ,roll, pitch, episode , total_reward_m, total_reward_d ,total_reward_yaw , total_reward_pr , closest_dist , distance_goal , name_data , total_positive_reward , total_negative_reward , end_distance , max_distance ,episode_number
+    global m1 , m2 , m3 , m4 ,lidar_distance ,global_y , global_x ,roll, pitch, episode , total_motor_er, total_distance_er , total_pitch_er, total_roll_er, total_yaw_er  , closest_dist , distance_goal , name_data , end_distance , max_distance ,episode_number
     def __init__(self):
         
         observation_high = np.array([np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max,np.finfo(np.float32).max])
@@ -161,41 +162,42 @@ class Environment():
         velocity.data = [0 , 0 , 0 , 0]
         velPub.publish(velocity)
         rospy.sleep(1)
-        m1 = 0
-        m2 = 0
-        m3 = 0
-        m4 = 0
+        m1 = 50
+        m2 = 50
+        m3 = 50
+        m4 = 50
 
         return obs 
 
 
     def step(self,action,state):
         global m1 , m2 , m3 , m4 , global_y , global_x , lidar_distance , yaw , roll , pitch
-        
-        m1 = m1 + action[0]*change
-        m2 = m2 + action[1]*change
-        m3 = m3 + action[2]*change
-        m4 = m4 + action[3]*change
 
-        if m1 > 100:
-            m1 = 100
-        if m1 < 0:
-            m1 = 0
-        if m2 > 100 :
-            m2 = 100
-        if m2 < 0:
-            m2 = 0
-        if m3 > 100 :
-            m3 = 100
-        if m3 < 0:
-            m3 = 0
-        if m4 > 100 :
-            m4 = 100
-        if m4 < 0:
-            m4 = 0
-        #print(m1,m2,m3,m4)
-        #print(action)
-        velocity.data = [abs(m1) ,-abs(m2) , abs(m3), -abs(m4)]
+
+        motor_0 = 1500 + action[0]
+
+        motor_1 = 1500 + action[1]
+
+        motor_2 = 1500 + action[2]
+
+        motor_3 = 1500 + action[3]
+        #Limit esc pulses
+        if(motor_0 > 2000): motor_0 = 2000
+        if(motor_1 > 2000): motor_1 = 2000
+        if(motor_2 > 2000): motor_2 = 2000
+        if(motor_3 > 2000): motor_3 = 2000
+
+        if(motor_0 < 1100): motor_0 = 1100
+        if(motor_1 < 1100): motor_1 = 1100
+        if(motor_2 < 1100): motor_2 = 1100
+        if(motor_3 < 1100): motor_3 = 1100
+        #Map esc values
+        m4 = ((motor_0 -1500)/25) + 50
+        m2 = ((motor_1 -1500)/25) + 50
+        m3 = ((motor_2 -1500)/25) + 50
+        m4 = ((motor_3 -1500)/25) + 50
+
+        velocity.data = [m1,-m2,m3,-m4]
         velPub.publish(velocity)
 
 
@@ -207,7 +209,7 @@ class Environment():
     #REWARDS
 
     def get_reward(self ,state, action):        
-        global m1 , m2 , m3 , m4 ,lidar_distance ,global_y , global_x ,roll, pitch, episode , total_reward_m, total_reward_d ,total_reward_yaw , total_reward_pr , closest_dist , distance_goal , name_data , total_positive_reward , total_negative_reward , end_distance , max_distance
+        global m1 , m2 , m3 , m4 ,lidar_distance ,global_y , global_x ,roll, pitch, episode , total_motor_er, total_distance_er ,total_pitch_er, total_roll_er, total_yaw_er , closest_dist , distance_goal , name_data , end_distance , max_distance
         
         #print(m1,m2,m3,m4)
         drone_position = [global_x , global_y , lidar_distance]
@@ -218,11 +220,11 @@ class Environment():
             closest_dist = distance_goal
 
         reward = 0
-        reward_d = 0              
-        reward_pr = 0
-        reward_xy = 0
-        reward_yaw = 0
-        reward_m =  0
+        distance_er = 0              
+        pitch_er = 0
+        roll_er = 0
+        yaw_er = 0
+        motor_er =  0
 
 
         end_distance =  distance_goal
@@ -230,105 +232,68 @@ class Environment():
         if max_distance < distance_goal:
             max_distance = distance_goal
 
-        #print(state[13] - distance_goal > 0.0001 )
+       
         
-        #print(math.exp(-0.33723073*(distance_goal**2)))
-        
-        #YAW ERROR
-
-
-        #CHECK YAW IS NOT ACCELERATING
-        
-        #DIFFERENCE IN YAW IN LAST 2 TIMESTEPS IS SMALLER THAN IN PREVIOUS 2 TIMESTEPS
-        ''' 
+        distance_er = -distance_goal/4 #4/4=1
+        pitch_er = -abs(pitch)/180 #180/180=1
+        roll_er = -abs(roll)/180 #180/180=1
+        yaw_er = (-abs(abs(yaw)-abs(state[25])))/180 #180/180=1
         
         
+       
+        '''
         
-        
-             #YAW OPTION B
-        if abs(abs(yaw)-abs(state[25]))< 1 and abs(abs(state[14])-abs(state[3])) < 1:
-            
-            reward_yaw = 0
-
-        else:
-            reward_yaw = -1
-            #print("yaw error")
-            
-          
-        si distance_goal < anterior
-            si lidar_distance (actual) < 5  
-                +lidar
-            si lidar_distance (actual) > 5  (lidar_distance(atual) > lidar_distance (actual-1)) && (lidar
-                -lidar
-           
-           
-           && _distance(atual-1) > lidar_distance (actual-2)))
-            recompensa + 1
-        ''' 
-
-           
-        #DISTANCE_GOAL
-        if abs(pitch) and abs(roll) < 10:
-            reward_pr = 0#MAX IS 0 SO
-        
-            if lidar_distance <= 5:
+        if lidar_distance <= 4:
                 
-                if (lidar_distance - state[24]) > 0.001:
-                    reward_d = 0.1
-                    print("UP ")
-                else:
-                    reward_d = -0.1
-                    print("NO UP")
-
-
-
-            elif lidar_distance > 5:
-                if abs(lidar_distance - state[24]) < abs((state[24] - state[13])) or lidar_distance < state[24]:    
-                    print("DECREASE")
-                    reward_d = 0.2
-                else:
-                    reward_d = -0.2
-                    print("NO DECREASE")
-
-            
-            
+            if (lidar_distance - state[24]) > 0.001:
+                distance_er = 0.1
+                print("UP ")
+                if abs(abs(yaw)-abs(state[25])) > 1 and abs(abs(state[25])-abs(state[14])) > 1:
+                    print("UP+YAW")
+                    distance_er = 0.2
             else:
-                reward_d = 0
-                #("away")
-        else:
-            reward_pr = -0.1
-            print("PITCHROLL OUT")
-        '''    
+                distance_er = 0
+                print("NO UP")
+
+
+
+        elif lidar_distance > 4:
+            if m1<state[29] and  m2 < state[30] and  m3 < state[31] and  m4 < state[32]:
+            #if abs(lidar_distance - state[24]) < abs((state[24] - state[13])) or lidar_distance < state[24]:    
+                print("DECREASE")
+                distance_er = 0.2
+            else:
+                distance_er = -0.2
+                print("NO DECREASE")
+
+            
+           
         #YAW OPTION A
         #if the yaw has been increasing over abs 1 in two consecutive steps
         if abs(abs(yaw)-abs(state[25])) > 1 and abs(abs(state[25])-abs(state[14])) > 1:
             #print("yaw ERROR")
-            reward_yaw = -1
+            yaw_er = -1
         else:
-            reward_yaw = 0
+            yaw_er = 0
             #print("yaw OK")
                 #print("yaw error")
             
-       
+        ''' 
        
 
-        
-            reward_d = math.exp(-0.33723073*(distance_goal**2))
 
-        else:
-            reward_d = 0
         
-        '''
-        total_reward_yaw += reward_yaw
-        total_reward_d  += reward_d
-        total_reward_pr  += reward_pr
+        total_yaw_er += yaw_er
+        total_distance_er  += distance_er
+        total_pitch_er  += pitch_er
+        total_roll_er  += roll_er
         
-        
-        reward = reward_d + reward_pr + reward_yaw
+        reward = 1 + total_distance_er + total_pitch_er + total_roll_er + total_yaw_er + total_motor_er
+
         #print (reward)
         with open(name_data + '.csv','a') as csv_file:
             csv_writer = csv.DictWriter(csv_file , fieldnames = fieldnames)
-            information = { "reward" : reward , "reward_d" : reward_d , "distance" : distance_goal, "lidar_value" : lidar_distance, "motor values" : [m1,m2,m3,m4], "global_x" : global_x , "global_y": global_y , "pitch" : pitch ,"roll" : roll, "yaw" : yaw }
+            information = { "reward" : reward , "distance_er" : distance_er , "distance" : distance_goal, "lidar_value" : lidar_distance, "motor values" : [m1,m2,m3,m4], "global_x" : global_x , "global_y": global_y , "pitch" : pitch ,"roll" : roll, "yaw" : yaw }
             csv_writer.writerow(information)
  
         return reward
@@ -373,8 +338,6 @@ class Environment():
         state[31] = m3/10
         state[32] = m4/10
         
-        #print(global_x, global_y, distance_goal, lidar_distance, yaw, pitch, roll)
-        #print(state)
         return state
 
 
@@ -391,14 +354,14 @@ class PPO():
         model_parameters = filter(lambda p: p.requires_grad, self.actor.parameters())
         params = sum([np.prod(p.size()) for p in model_parameters])
         #print(params)
-        self.actor_optim = Adam(self.actor.parameters(), lr= 3e-4 ,weight_decay=0.2)
-        self.critic_optim = Adam(self.critic.parameters(), lr= 3e-4 ,weight_decay=0.2)
+        self.actor_optim = Adam(self.actor.parameters(), lr=2.5e-4 ,weight_decay=0.2)
+        self.critic_optim = Adam(self.critic.parameters(), lr=2.5e-4 ,weight_decay=0.2)
 
         self.cov_var = torch.full(size=(self.act_dim,), fill_value=0.002)
         self.cov_mat = torch.diag(self.cov_var).to(self.actor.device)
 
     def learn(self,total_timesteps):
-        global m1 , m2 , m3 , m4 ,lidar_distance ,global_y , global_x ,roll, pitch, episode , total_reward_m, total_reward_d ,total_reward_yaw , total_reward_pr , closest_dist , distance_goal , name_data , total_positive_reward , total_negative_reward , end_distance , max_distance
+        global m1 , m2 , m3 , m4 ,lidar_distance ,global_y , global_x ,roll, pitch, episode , total_motor_er, total_distance_er ,total_yaw_er , closest_dist , distance_goal , name_data , end_distance , max_distance
         
         t_till_now = 0
         i_till_now = 0
@@ -450,7 +413,7 @@ class PPO():
             
 
     def rollout(self):
-        global m1 , m2 , m3 , m4 ,lidar_distance ,global_y , global_x ,roll, pitch, episode , total_reward_m, total_reward_d ,total_reward_yaw , total_reward_pr , closest_dist , distance_goal , name_data , total_positive_reward , total_negative_reward , end_distance , max_distance  ,highest_point ,highest_x , highest_y , highest_pitch , highest_roll , up_actions , down_actions ,episode_number 
+        global m1 , m2 , m3 , m4 ,lidar_distance ,global_y , global_x ,roll, pitch, episode , total_motor_er, total_distance_er ,total_yaw_er ,total_pitch_er,total_roll_er, closest_dist , distance_goal , name_data , end_distance , max_distance  ,highest_point ,highest_x , highest_y , highest_pitch , highest_roll ,episode_number 
         batch_obs = []
         batch_acts = []
         batch_log_probs = []
@@ -477,15 +440,12 @@ class PPO():
             highest_y = 0
             highest_pitch = 0 
             highest_roll = 0
-            up_actions = 0
-            down_actions = 0
-            total_reward_m = 0
-            total_reward_yaw = 0
-            total_reward_d = 0
-            total_reward_pr = 0
-            total_positive_reward = 0
-            total_negative_reward = 0
-            
+            total_motor_er = 0
+            total_yaw_er = 0
+            total_pitch_er = 0
+            total_roll_er = 0
+            total_distance_er = 0
+           
 
             with open(name_data + '.csv','w') as csv_file:
                 csv_writer = csv.DictWriter(csv_file , fieldnames = fieldnames)
@@ -537,12 +497,13 @@ class PPO():
 
             with open(name,'a') as csv_file_2:
                 csv_writer_2 = csv.DictWriter(csv_file_2 , fieldnames = fieldnames2)
-                information2 = {"epsodic reward" : sum(ep_rews) ,"total_positive_reward" : total_positive_reward, "total_negative_reward" : total_negative_reward, "closest_dist" : closest_dist, "max_height" : highest_point,"end_distance": end_distance,"max_distance": max_distance, "up_actions(100)":up_actions , "down_actions(0)":down_actions, "highest_x" : highest_x, "highest_y" : highest_y , "highest_pitch" : highest_pitch, "highest_roll" : highest_roll,"epsodic reward_m" : total_reward_m, "episodic reward_d" : total_reward_d, "episodic reward_yaw" :total_reward_yaw, "episodic reward_pr": total_reward_pr}
-                #'epsodic reward' , 'total_positive_reward' , 'total_negative_reward' ,'closest_dist' ,'max_height' ,'end_distance' ,'max_distance' , 'up_actions(100)' , 'down_actions(0)', 'highest_x' , 'highest_y' , 'highest_pitch' , 'highest_roll' , 'epsodic reward_m' , 'episodic reward_d','episodic reward_yaw' ,'episodic reward_pr'
+                information2 = {"epsodic reward" : sum(ep_rews), "closest_dist" : closest_dist, "max_height" : highest_point,"end_distance": end_distance,"max_distance": max_distance, "highest_x" : highest_x, "highest_y" : highest_y , "highest_pitch" : highest_pitch, "highest_roll" : highest_roll,"epsodic motor_er" : total_motor_er, "episodic distance_er" : total_distance_er, "episodic pitch_er": total_pitch_er, "episodic roll_er": total_roll_er, "episodic yaw_er" :total_yaw_er, }
+                #'epsodic reward' ,'closest_dist' ,'max_height' ,'end_distance' ,'max_distance' , 'highest_x' , 'highest_y' , 'highest_pitch' , 'highest_roll' , 'epsodic motor_er' , 'episodic distance_er','episodic pitch_er','episodic roll_er','episodic yaw_er'
                 csv_writer_2.writerow(information2)
             #PRINT TOTAL EPISODIC REWARD
-            print(total_reward_yaw)
-            print(sum(ep_rews) , "in episode" ,episode_number ) # sum will add all the rewards
+            #print(total_yaw_er)
+            
+            print(sum(ep_rews) , "in episode", episode_number, "distance", total_distance_er, "pitch", total_pitch_er, "roll", total_roll_er, "yaw", total_yaw_er ) # sum will add all the rewards
             episode_number = episode_number +1
             batch_lens.append(ep_t + 1)
             batch_rews.append(ep_rews)
@@ -657,10 +618,9 @@ def euler_from_quaternion(x, y, z, w):
 
 
 
-velocity = Float64MultiArray()
 
 def service():
-    global roll, pitch, yaw , lidar_distance , m1 , m2 , m3 , m4 ,episode , total_reward_m, total_reward_d ,total_reward_yaw , total_reward_pr , closest_dist , distance_goal , name_data , total_positive_reward , total_negative_reward , end_distance , max_distance ,highest_point ,highest_x , highest_y , highest_pitch , highest_roll , up_actions , down_actions 
+    global roll, pitch, yaw , lidar_distance , m1 , m2 , m3 , m4 ,episode , total_motor_er, total_distance_er , total_pitch_er, total_roll_er, total_yaw_er , closest_dist , distance_goal , name_data , end_distance , max_distance ,highest_point ,highest_x , highest_y , highest_pitch , highest_roll 
     
     #print(lidar_distance,"lidar_distance")
     velocity.data = [0 , 0 , 0 , 0]
@@ -670,19 +630,7 @@ def service():
     end_distance = 0 
     max_distance = 0
 
-    highest_point = 0
-    highest_x = 0
-    highest_y = 0
-    highest_pitch = 0 
-    highest_roll = 0
-    up_actions = 0
-    down_actions = 0
-    total_reward_m = 0
-    total_reward_yaw = 0
-    total_reward_d = 0
-    total_reward_pr = 0
-    total_positive_reward = 0
-    total_negative_reward = 0
+    
     
     time.sleep(1)
     
