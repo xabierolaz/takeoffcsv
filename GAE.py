@@ -52,10 +52,10 @@ velPub = rospy.Publisher('/Kwad/joint_motor_controller/command', Float64MultiArr
 reset_world = rospy.ServiceProxy('/gazebo/reset_world', Empty)
 fieldnames = ['reward','motor_er','distance_er','pitch_er','roll_er', 'yaw_er', 'motor values','distance' , 'lidar_value' , 'global_x' , 'global_y' , 'pitch' ,'roll', 'yaw']
 fieldnames2 = ['epsodic reward'  ,'closest_dist' ,'max_height' ,'end_distance' ,'max_distance' , 'highest_x' , 'highest_y' , 'highest_pitch' , 'highest_roll' , 'epsodic motor_er' , 'episodic distance_er','episodic pitch_er','episodic roll_er','episodic yaw_er' ]
-m1 = 50
-m2 = 50
-m3 = 50
-m4 = 50
+m1 = 0
+m2 = 0
+m3 = 0
+m4 = 0
 
 
 
@@ -108,43 +108,6 @@ class Network(nn.Module):
         out = self.model(obs)
 
         return out
-'''
-class Network(nn.Module):
-    def __init__(self , in_dim , out_dim):
-        super(Network,self).__init__()
-        self.model = nn.Sequential(
-            nn.Linear(in_dim , 64),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(64,128),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(128,64),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(64,32),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(32,16),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(16,out_dim),
-            nn.Tanh()
-        )
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.to(self.device)
-        self.log_std = nn.Parameter(torch.ones(out_dim)*-4)
-    
-    def forward(self,obs):
-        if isinstance(obs ,np.ndarray):
-            obs = torch.tensor(obs ,dtype= torch.float).to(self.device)
-        
-        out = self.model(obs)
-
-        return out
-
-'''
-
 
 class Environment():
     global m1 , m2 , m3 , m4 ,lidar_distance ,global_y , global_x ,roll, pitch, episode , total_motor_er, total_distance_er , total_pitch_er, total_roll_er, total_yaw_er  , closest_dist , distance_goal , name_data , end_distance , max_distance ,episode_number
@@ -163,9 +126,9 @@ class Environment():
         velPub.publish(velocity)
         rospy.sleep(1)
         m1 = 50
-        m2 = 50
+        m2 = -50
         m3 = 50
-        m4 = 50
+        m4 = -50
 
         return obs 
 
@@ -173,31 +136,56 @@ class Environment():
     def step(self,action,state):
         global m1 , m2 , m3 , m4 , global_y , global_x , lidar_distance , yaw , roll , pitch
 
+        ''''
+        motor_1 = 1500 + action[0]
 
-        motor_0 = 1500 + action[0]
+        motor_2 = 1500 + action[1]
 
-        motor_1 = 1500 + action[1]
+        motor_3 = 1500 + action[2]
 
-        motor_2 = 1500 + action[2]
-
-        motor_3 = 1500 + action[3]
+        motor_4 = 1500 + action[3]
         #Limit esc pulses
-        if(motor_0 > 2000): motor_0 = 2000
         if(motor_1 > 2000): motor_1 = 2000
         if(motor_2 > 2000): motor_2 = 2000
         if(motor_3 > 2000): motor_3 = 2000
+        if(motor_4 > 2000): motor_4 = 2000
 
-        if(motor_0 < 1100): motor_0 = 1100
         if(motor_1 < 1100): motor_1 = 1100
         if(motor_2 < 1100): motor_2 = 1100
         if(motor_3 < 1100): motor_3 = 1100
+        if(motor_4 < 1100): motor_4 = 1100
         #Map esc values
-        m4 = ((motor_0 -1500)/25) + 50
-        m2 = ((motor_1 -1500)/25) + 50
-        m3 = ((motor_2 -1500)/25) + 50
-        m4 = ((motor_3 -1500)/25) + 50
+        m1 = ((motor_1 -1500)/25) + 50
+        m2 = ((motor_2 -1500)/25) + 50
+        m3 = ((motor_3 -1500)/25) + 50
+        m4 = ((motor_4 -1500)/25) + 50
+        '''
+        #print(action)
+        m1 = m1 + action[0]*change
+        m2 = m2 + action[1]*change
+        m3 = m3 + action[2]*change
+        m4 = m4 + action[3]*change
 
-        velocity.data = [m1,-m2,m3,-m4]
+        
+        if m1 > 70:
+            m1 = 70
+        if m1 < 34:
+            m1 = 34
+        if m2 < -70 :
+            m2 = -70
+        if m2 > -34:
+            m2 = -34
+        if m3 > 70 :
+            m3 = 70
+        if m3 < 34:
+            m3 = 34
+        if m4 < -70 :
+            m4 = -70
+        if m4 > -34:
+            m4 = -34
+
+
+        velocity.data = [m1,m2,m3,m4]
         velPub.publish(velocity)
 
 
@@ -241,45 +229,6 @@ class Environment():
         
         
        
-        '''
-        
-        if lidar_distance <= 4:
-                
-            if (lidar_distance - state[24]) > 0.001:
-                distance_er = 0.1
-                print("UP ")
-                if abs(abs(yaw)-abs(state[25])) > 1 and abs(abs(state[25])-abs(state[14])) > 1:
-                    print("UP+YAW")
-                    distance_er = 0.2
-            else:
-                distance_er = 0
-                print("NO UP")
-
-
-
-        elif lidar_distance > 4:
-            if m1<state[29] and  m2 < state[30] and  m3 < state[31] and  m4 < state[32]:
-            #if abs(lidar_distance - state[24]) < abs((state[24] - state[13])) or lidar_distance < state[24]:    
-                print("DECREASE")
-                distance_er = 0.2
-            else:
-                distance_er = -0.2
-                print("NO DECREASE")
-
-            
-           
-        #YAW OPTION A
-        #if the yaw has been increasing over abs 1 in two consecutive steps
-        if abs(abs(yaw)-abs(state[25])) > 1 and abs(abs(state[25])-abs(state[14])) > 1:
-            #print("yaw ERROR")
-            yaw_er = -1
-        else:
-            yaw_er = 0
-            #print("yaw OK")
-                #print("yaw error")
-            
-        ''' 
-       
 
 
         
@@ -287,8 +236,8 @@ class Environment():
         total_distance_er  += distance_er
         total_pitch_er  += pitch_er
         total_roll_er  += roll_er
-        
-        reward = 1 + total_distance_er + total_pitch_er + total_roll_er + total_yaw_er + total_motor_er
+        #print( distance_er , pitch_er , roll_er , yaw_er , motor_er , "sum is", distance_er + pitch_er + roll_er + yaw_er + motor_er)
+        reward = 1 + distance_er + pitch_er + roll_er + yaw_er + motor_er
 
         #print (reward)
         with open(name_data + '.csv','a') as csv_file:
@@ -354,8 +303,8 @@ class PPO():
         model_parameters = filter(lambda p: p.requires_grad, self.actor.parameters())
         params = sum([np.prod(p.size()) for p in model_parameters])
         #print(params)
-        self.actor_optim = Adam(self.actor.parameters(), lr=2.5e-4 ,weight_decay=0.2)
-        self.critic_optim = Adam(self.critic.parameters(), lr=2.5e-4 ,weight_decay=0.2)
+        self.actor_optim = Adam(self.actor.parameters(), lr=3e-4 ,weight_decay=0.2)
+        self.critic_optim = Adam(self.critic.parameters(), lr=1e-3 ,weight_decay=0.2)
 
         self.cov_var = torch.full(size=(self.act_dim,), fill_value=0.002)
         self.cov_mat = torch.diag(self.cov_var).to(self.actor.device)
